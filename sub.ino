@@ -1,5 +1,3 @@
-#include <Arduino.h>
-
 // Cấu hình protocol
 const char START_BYTE = '<';
 const char END_BYTE = '>';
