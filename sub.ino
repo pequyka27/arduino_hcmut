@@ -78,11 +78,9 @@ void parsePacket(char* packet) {
   
   // Xử lý lệnh
   switch (command) {
-    case 'M': // Motor control
-      handleMotorCommand(data);
+    case 'M': 
       break;
-    case 'L': // Line following
-      handleLineFollowing(data);
+    case 'L':
       break;
     // Thêm các lệnh khác...
     default:
@@ -99,32 +97,4 @@ uint8_t calculateChecksum(const char* data) {
   return checksum;
 }
 
-void handleMotorCommand(char* data) {
-  int16_t speeds[4];
-  uint8_t index = 0;
-  
-  char* token = strtok(data, ",");
-  while (token && index < 4) {
-    speeds[index++] = atoi(token);
-    token = strtok(NULL, ",");
-  }
-  
-  if (index != 4) {
-    Serial.println("ERROR: Invalid motor data");
-    return;
-  }
-  
-  // Điều khiển động cơ ở đây
-  Serial.print("MOTOR: ");
-  for (int i=0; i<4; i++) {
-    Serial.print(speeds[i]);
-    Serial.print(" ");
-  }
-  Serial.println();
-}
 
-void handleLineFollowing(char* data) {
-  // Xử lý lệnh line following
-  Serial.print("LINE FOLLOWING: ");
-  Serial.println(data);
-}
