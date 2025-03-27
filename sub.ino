@@ -1,98 +1,75 @@
-// Cấu hình protocol
-const char START_BYTE = '<';
-const char END_BYTE = '>';
-const unsigned int MAX_PACKET_LENGTH = 32;
+// SLAVE CODE - Phiên bản tối ưu từ hàm của bạn
+void handleSerialComm() {
+  static String inputBuffer = "";
+  static bool packetInProgress = false;
 
-// Biến xử lý
-char packetBuffer[MAX_PACKET_LENGTH];
-unsigned int packetIndex = 0;
-bool inPacket = false;
-
-void setup() {
-  Serial.begin(115200); // Phải khớp baudrate với master
-  while (!Serial);
-}
-
-void loop() {
-  processSerial();
-}
-
-void processSerial() {
   while (Serial.available()) {
     char c = Serial.read();
-    
+
+    // Bắt đầu packet
     if (c == START_BYTE) {
-      inPacket = true;
-      packetIndex = 0;
+      inputBuffer = "";
+      packetInProgress = true;
       continue;
     }
-    
-    if (inPacket) {
-      if (c == END_BYTE) {
-        parsePacket(packetBuffer);
-        inPacket = false;
-        return;
-      }
-      
-      if (packetIndex < MAX_PACKET_LENGTH-1) {
-        packetBuffer[packetIndex++] = c;
-      }
-      else {
-        // Buffer overflow
-        inPacket = false;
-      }
+
+    // Kết thúc packet
+    if (c == END_BYTE && packetInProgress) {
+      processSerialCommand(inputBuffer);
+      inputBuffer = "";
+      packetInProgress = false;
+      return;
+    }
+
+    // Thu thập dữ liệu
+    if (packetInProgress && (inputBuffer.length() < 64)) {
+      inputBuffer += c;
     }
   }
 }
 
-void parsePacket(char* packet) {
-  packet[packetIndex] = '\0'; // Thêm kết thúc chuỗi
-  
-  // Tách phần checksum (ví dụ: "M:100,-200,150,-50*C8")
-  char* checksumPos = strchr(packet, '*');
-  if (!checksumPos) {
-    Serial.println("ERROR: Missing checksum");
+void processSerialCommand(String &cmd) {
+  // Thêm phần xử lý checksum và validate
+  int lastColon = cmd.lastIndexOf(':');
+  if (lastColon == -1) {
+    Serial.println("<ERR:NO_CHECKSUM>");
     return;
   }
-  
+
+  // Tách checksum (2 ký tự cuối)
+  String receivedChecksum = cmd.substring(lastColon + 1);
+  String payload = cmd.substring(0, lastColon);
+
   // Verify checksum
-  uint8_t receivedChecksum = strtoul(checksumPos+1, NULL, 16);
-  *checksumPos = '\0'; // Tách phần data
-  
-  if (calculateChecksum(packet) != receivedChecksum) {
-    Serial.println("ERROR: Checksum mismatch");
+  if (calculateChecksum(payload) != strtol(receivedChecksum.c_str(), NULL, 16)) {
+    Serial.print("<ERR:CHECKSUM:");
+    Serial.print(calculateChecksum(payload), HEX);
+    Serial.println(">");
     return;
   }
-  
-  // Tách command và data
-  char* colonPos = strchr(packet, ':');
-  if (!colonPos) {
-    Serial.println("ERROR: Invalid format");
-    return;
+
+  // Xử lý lệnh (giữ nguyên logic từ master)
+  int firstColon = payload.indexOf(':');
+  if (firstColon == -1) return;
+
+  String command = payload.substring(0, firstColon);
+  String value = payload.substring(firstColon + 1);
+
+  if (command == "M") {
+    // Xử lý motor command
+    int16_t speeds[4];
+    parseMotorValues(value, speeds);
+    setMotorSpeeds(speeds);
+    Serial.println("<ACK:M>");
   }
-  
-  char command = packet[0];
-  char* data = colonPos + 1;
-  
-  // Xử lý lệnh
-  switch (command) {
-    case 'M': 
-      break;
-    case 'L':
-      break;
-    // Thêm các lệnh khác...
-    default:
-      Serial.print("ERROR: Unknown command ");
-      Serial.println(command);
-  }
+  // ... thêm các lệnh khác
 }
 
-uint8_t calculateChecksum(const char* data) {
-  uint8_t checksum = 0;
-  while (*data) {
-    checksum ^= *data++;
+// Hàm tính checksum (thêm vào)
+uint8_t calculateChecksum(const String &data) {
+  uint8_t crc = 0;
+  for (unsigned int i = 0; i < data.length(); i++) {
+    crc ^= (uint8_t)data.charAt(i);
   }
-  return checksum;
+  return crc;
 }
-
-
