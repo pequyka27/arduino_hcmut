@@ -1,62 +1,58 @@
-// SLAVE CODE - Phiên bản tối ưu từ hàm của bạn
-void handleSerialComm() {
-  static String inputBuffer = "";
-  static bool packetInProgress = false;
+#define START_BYTE '<'
+#define END_BYTE '>'
+#define MAX_PACKET_LEN 64
 
+char packetBuffer[MAX_PACKET_LEN];
+uint8_t packetIndex = 0;
+bool packetInProgress = false;
+uint8_t currentChecksum = 0;
+
+void handleSerialComm() {
   while (Serial.available()) {
     char c = Serial.read();
 
-    // Bắt đầu packet
     if (c == START_BYTE) {
-      inputBuffer = "";
+      packetIndex = 0;
+      currentChecksum = 0;
       packetInProgress = true;
       continue;
     }
 
-    // Kết thúc packet
-    if (c == END_BYTE && packetInProgress) {
-      processSerialCommand(inputBuffer);
-      inputBuffer = "";
+    if (!packetInProgress) continue;
+
+    if (c == END_BYTE) {
+      processPacket(packetBuffer, packetIndex);
       packetInProgress = false;
       return;
     }
 
-    // Thu thập dữ liệu
-    if (packetInProgress && (inputBuffer.length() < 64)) {
-      inputBuffer += c;
+    if (packetIndex < MAX_PACKET_LEN - 1) {
+      // Update checksum while receiving
+      currentChecksum ^= c; 
+      packetBuffer[packetIndex++] = c;
     }
   }
 }
 
-void processSerialCommand(String &cmd) {
-  // Thêm phần xử lý checksum và validate
-  int lastColon = cmd.lastIndexOf(':');
-  if (lastColon == -1)  return;
+void processPacket(char* data, uint8_t length) {
+  // Tách command và checksum
+  uint8_t checksum = (uint8_t)data[length-1];
+  uint8_t calcChecksum = currentChecksum ^ data[length-1]; // Loại bỏ checksum khỏi phép XOR
+  
+  if (calcChecksum != 0) return; // Bỏ qua packet lỗi
 
-  // Tách checksum (2 ký tự cuối)
-  String receivedChecksum = cmd.substring(lastColon + 1);
-  String payload = cmd.substring(0, lastColon);
+  // Xử lý lệnh (ví dụ: "M,100,200,50")
+  char* command = strtok(data, ",");
+  if (!command) return;
 
-  // Verify checksum
-  if (calculateChecksum(payload) != strtol(receivedChecksum.c_str(), NULL, 16))  return;
-
-
-  // Xử lý lệnh (giữ nguyên logic từ master)
-  int firstColon = payload.indexOf(':');
-  if (firstColon == -1) return;
-
-  String command = payload.substring(0, firstColon);
-  String value = payload.substring(firstColon + 1);
-
-  switch (command)
-  // ... thêm các lệnh khác
-}
-
-// Hàm tính checksum (thêm vào)
-uint8_t calculateChecksum(const String &data) {
-  uint8_t crc = 0;
-  for (unsigned int i = 0; i < data.length(); i++) {
-    crc ^= (uint8_t)data.charAt(i);
+  if (strcmp(command, "M") == 0) { // Motor command
+    int16_t speeds[4];
+    for (uint8_t i=0; i<4; i++) {
+      char* val = strtok(NULL, ",");
+      if (!val) return;
+      speeds[i] = atoi(val);
+    }
+    setMotorSpeeds(speeds);
   }
-  return crc;
+  // ... các lệnh khác
 }
