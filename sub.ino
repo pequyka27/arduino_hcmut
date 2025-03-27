@@ -31,22 +31,15 @@ void handleSerialComm() {
 void processSerialCommand(String &cmd) {
   // Thêm phần xử lý checksum và validate
   int lastColon = cmd.lastIndexOf(':');
-  if (lastColon == -1) {
-    Serial.println("<ERR:NO_CHECKSUM>");
-    return;
-  }
+  if (lastColon == -1)  return;
 
   // Tách checksum (2 ký tự cuối)
   String receivedChecksum = cmd.substring(lastColon + 1);
   String payload = cmd.substring(0, lastColon);
 
   // Verify checksum
-  if (calculateChecksum(payload) != strtol(receivedChecksum.c_str(), NULL, 16)) {
-    Serial.print("<ERR:CHECKSUM:");
-    Serial.print(calculateChecksum(payload), HEX);
-    Serial.println(">");
-    return;
-  }
+  if (calculateChecksum(payload) != strtol(receivedChecksum.c_str(), NULL, 16))  return;
+
 
   // Xử lý lệnh (giữ nguyên logic từ master)
   int firstColon = payload.indexOf(':');
@@ -55,13 +48,7 @@ void processSerialCommand(String &cmd) {
   String command = payload.substring(0, firstColon);
   String value = payload.substring(firstColon + 1);
 
-  if (command == "M") {
-    // Xử lý motor command
-    int16_t speeds[4];
-    parseMotorValues(value, speeds);
-    setMotorSpeeds(speeds);
-    Serial.println("<ACK:M>");
-  }
+  switch (command)
   // ... thêm các lệnh khác
 }
 
