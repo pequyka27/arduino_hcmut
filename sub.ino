@@ -1,9 +1,6 @@
 #define START_BYTE '<'
 #define END_BYTE '>'
 #define MAX_PACKET_LEN 64
-
-#include <Arduino.h>
-
 // -------------------------------
 // Global Variables & Constants
 // -------------------------------
@@ -113,20 +110,7 @@ void processPacket(char* data, uint8_t length) {
   if (!command) return;
 
   // Process commands from master
-  if (strcmp(command, "M") == 0) { // Motor command
-    int16_t speeds[4];
-    for (uint8_t i = 0; i < 4; i++) {
-      char* val = strtok(NULL, ",");
-      if (!val) return;
-      speeds[i] = atoi(val);
-    }
-    setMotorSpeeds(speeds);
-  }
-  else if (strcmp(command, "L") == 0) { // Line following mode command
-    char* val = strtok(NULL, ",:");
-    if (!val) return;
-    lineFollowingMode = (atoi(val) == 1);
-  }
+ 
   // Additional commands can be handled here
 }
 
@@ -163,6 +147,3 @@ void calculateXYR(int* x, int* y, int* r) {
   *r = 0;   // No rotation by default
 }
 
-void setMotorSpeeds(int16_t speeds[4]) {
-  // Set motor speeds based on received command values
-}
