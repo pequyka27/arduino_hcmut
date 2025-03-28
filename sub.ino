@@ -2,61 +2,77 @@
 #define END_BYTE '>'
 #define MAX_PACKET_LEN 64
 
-// Thêm biến để kiểm soát tần suất gửi dữ liệu
-uint32_t lastSerialSend = 0;
-const uint16_t SERIAL_SEND_INTERVAL = 15; // 15ms ≈ 66Hz update rate
+#include <Arduino.h>
 
-// Thêm biến giới hạn tốc độ cho chế độ dò line
-const float LINE_FOLLOW_SPEED_FACTOR = 0.6; // Giới hạn ở 60% tốc độ tối đa
+// -------------------------------
+// Global Variables & Constants
+// -------------------------------
+uint32_t lastSerialSend = 0;            // Timestamp for last serial transmission
+const uint16_t SERIAL_SEND_INTERVAL = 15; // ~15ms interval (~66Hz update rate)
+
+const float LINE_FOLLOW_SPEED_FACTOR = 0.6; // Limit for line following speed (60% of max)
 
 char packetBuffer[MAX_PACKET_LEN];
 uint8_t packetIndex = 0;
 bool packetInProgress = false;
 uint8_t currentChecksum = 0;
 
-// Thêm biến để theo dõi chế độ dò line
-bool lineFollowingMode = false;
+bool lineFollowingMode = false; // Flag for line following mode
 
+// -------------------------------
+// Function Prototypes
+// -------------------------------
+void handleSerialComm();
+void processPacket(char* data, uint8_t length);
+void sendXYRData(int x, int y, int r);
+void readLineSensors();
+void calculateXYR(int* x, int* y, int* r);
+void setMotorSpeeds(int16_t speeds[4]);
+
+// -------------------------------
+// Arduino Setup Function
+// -------------------------------
 void setup() {
   Serial.begin(115200);
-  // Thêm khởi tạo cho cảm biến dò line và các thiết bị khác tại đây
+  // Initialize sensors and other devices here
 }
 
+// -------------------------------
+// Arduino Main Loop
+// -------------------------------
 void loop() {
-  // Xử lý dữ liệu nhận từ master
-  handleSerialComm();
-  
-  // Đọc cảm biến dò line và tính toán giá trị x, y, r
-  // Giả sử các hàm readLineSensors() và calculateXYR() đã được định nghĩa ở nơi khác
-  int x = 0, y = 0, r = 0;
-  
+  handleSerialComm(); // Process incoming serial data
+
+  int x = 0, y = 0, r = 0; // Variables for sensor data
+
   if (lineFollowingMode) {
-    // Đọc cảm biến và tính toán giá trị điều khiển
+    // Update sensor readings and compute control values
     readLineSensors();
     calculateXYR(&x, &y, &r);
-    
-    // Gửi dữ liệu về master với tần suất được kiểm soát
+
+    // Ensure we send data at a controlled rate
     uint32_t currentMillis = millis();
     if (currentMillis - lastSerialSend >= SERIAL_SEND_INTERVAL) {
       lastSerialSend = currentMillis;
-      
-      // Áp dụng giới hạn tốc độ khi dò line
+
+      // Apply speed limitation for line following
       x = round(x * LINE_FOLLOW_SPEED_FACTOR);
       y = round(y * LINE_FOLLOW_SPEED_FACTOR);
       r = round(r * LINE_FOLLOW_SPEED_FACTOR);
-      
-      // Gửi dữ liệu về master
-      sendXYRData(x, y, r);
+
+      sendXYRData(x, y, r); // Transmit computed data to master
     }
   }
-  
-  // Thêm xử lý khác nếu cần
 }
 
+// -------------------------------
+// Serial Communication Handler
+// -------------------------------
 void handleSerialComm() {
   while (Serial.available()) {
     char c = Serial.read();
 
+    // Detect start of packet
     if (c == START_BYTE) {
       packetIndex = 0;
       currentChecksum = 0;
@@ -64,79 +80,89 @@ void handleSerialComm() {
       continue;
     }
 
+    // Skip characters if no packet is in progress
     if (!packetInProgress) continue;
 
+    // Detect end of packet and process it
     if (c == END_BYTE) {
       processPacket(packetBuffer, packetIndex);
       packetInProgress = false;
       return;
     }
 
+    // Append character to buffer and update checksum if space allows
     if (packetIndex < MAX_PACKET_LEN - 1) {
-      // Update checksum while receiving
-      currentChecksum ^= c; 
+      currentChecksum ^= c;
       packetBuffer[packetIndex++] = c;
     }
   }
 }
 
+// -------------------------------
+// Packet Processing Function
+// -------------------------------
 void processPacket(char* data, uint8_t length) {
-  // Tách command và checksum
-  uint8_t checksum = (uint8_t)data[length-1];
-  uint8_t calcChecksum = currentChecksum ^ data[length-1]; // Loại bỏ checksum khỏi phép XOR
+  // Validate checksum
+  uint8_t checksum = (uint8_t)data[length - 1];
+  uint8_t calcChecksum = currentChecksum ^ data[length - 1];
   
-  if (calcChecksum != 0) return; // Bỏ qua packet lỗi
+  if (calcChecksum != 0) return; // Discard invalid packet
 
-  // Xử lý lệnh (ví dụ: "M,100,200,50")
+  // Tokenize command from packet data
   char* command = strtok(data, ",:");
   if (!command) return;
 
-  // Xử lý các lệnh từ master
+  // Process commands from master
   if (strcmp(command, "M") == 0) { // Motor command
     int16_t speeds[4];
-    for (uint8_t i=0; i<4; i++) {
+    for (uint8_t i = 0; i < 4; i++) {
       char* val = strtok(NULL, ",");
       if (!val) return;
       speeds[i] = atoi(val);
     }
     setMotorSpeeds(speeds);
-  } else if (strcmp(command, "L") == 0) { // Line following mode
+  }
+  else if (strcmp(command, "L") == 0) { // Line following mode command
     char* val = strtok(NULL, ",:");
     if (!val) return;
     lineFollowingMode = (atoi(val) == 1);
   }
-  // ... các lệnh khác
+  // Additional commands can be handled here
 }
 
+// -------------------------------
+// Data Transmission Function
+// -------------------------------
 void sendXYRData(int x, int y, int r) {
-  // Tính checksum
   char payload[20];
   snprintf(payload, sizeof(payload), "%d:%d:%d", x, y, r);
   
+  // Calculate checksum for payload
   byte checksum = 0;
   for (int i = 0; payload[i] != '\0'; i++) {
     checksum ^= payload[i];
   }
   
-  // Gửi dữ liệu
+  // Construct and send the packet
   char packet[30];
   snprintf(packet, sizeof(packet), "%c%s:%02X%c", START_BYTE, payload, checksum, END_BYTE);
   Serial.println(packet);
 }
 
-// Giả định các hàm này được triển khai ở nơi khác trong code
+// -------------------------------
+// Stub Functions (Implement as needed)
+// -------------------------------
 void readLineSensors() {
-  // Đọc dữ liệu từ cảm biến dò line
+  // Implement sensor reading logic here
 }
 
 void calculateXYR(int* x, int* y, int* r) {
-  // Tính toán giá trị x, y, r từ dữ liệu cảm biến
-  // Giả sử một thuật toán đơn giản:
-  *x = 0;  // Giá trị mặc định, thay đổi theo thuật toán thực tế
-  *y = 100; // Tiến về phía trước với tốc độ trung bình
-  *r = 0;  // Không xoay
+  // Compute XYR values from sensor data
+  *x = 0;   // Default value (update based on actual algorithm)
+  *y = 100; // Forward movement with moderate speed
+  *r = 0;   // No rotation by default
 }
 
 void setMotorSpeeds(int16_t speeds[4]) {
-  // Đặt tốc độ cho động cơ (nếu có)
+  // Set motor speeds based on received command values
 }
