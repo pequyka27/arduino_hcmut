@@ -214,19 +214,6 @@ void setMode(byte newMode) {
       rSpeed = 0;
       break;
   }
-  
-  // Phản hồi xác nhận chế độ mới (phản hồi theo chữ cái của chế độ)
-  String modeChar;
-  switch (currentMode) {
-    case 0: modeChar = "N"; break; // None
-    case 1: modeChar = "L"; break; // Line
-    case 2: modeChar = "C"; break; // Clamp
-    case 3: modeChar = "T"; break; // Pull (T)
-    case 4: modeChar = "S"; break; // Stepper
-  }
-  
-  String ackMsg = "<A:" + modeChar + ":" + String(currentMode == 0 ? 0 : 1) + ">";
-  Serial.println(ackMsg);
 }
 
 void processLineSensors() {
