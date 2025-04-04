@@ -1,5 +1,5 @@
 #include <PS2X_lib.h>
-#include <math.h>
+
 // ================================================================
 // FUNCTION PROTOTYPES
 // ================================================================
@@ -18,24 +18,12 @@ void calculateMecanumSpeeds(int16_t* speeds);
 void setMotorSpeed(byte motorIndex, int16_t speed);
 void handleSystemModes();
 void handleModeSelection();
-void checkSafety();
-
-// Serial communication
-void handleSerialComm();
-void processSerialCommand(String &cmd);
-void sendAck(char cmd);
-void sendCommand(char cmd, int data);
 
 // Utility functions
 int16_t applyDeadzone(int16_t value);
 int16_t applyCurve(int16_t value);
 int16_t applyRamping(int16_t current, int16_t target);
 void emergencyStop();
-
-// Placeholder functions for additional controls
-void controlTowMechanism();
-void controlClamp();
-void controlStepper();
 void lineFollowingMode();
 
 // ================================================================
@@ -47,10 +35,10 @@ void lineFollowingMode();
 const struct {
   byte in1, in2, en;
 } MOTORS[MOTOR_COUNT] = {
-  {4, 5, 3},    // Back Right (BR) - Timer2
-  {7, 8, 9},    // Back Left (BL) - Timer1
-  {2, 12, 10},  // Front Right (FR) - Timer1
-  {13, A0, 11}  // Front Left (FL) - Timer2
+  {4, 5, 3},    // Back Right (BR)
+  {7, 8, 9},    // Back Left (BL)
+  {2, 12, 10},  // Front Right (FR)
+  {13, A0, 11}  // Front Left (FL)
 };
 
 // PS2 controller pins: DAT, CMD, SEL, CLK
@@ -61,44 +49,32 @@ const byte PS2_PINS[] = {A2, A3, A4, A5};
 // ================================================================
 
 // Motor control parameters
-const int16_t MAX_SPEED = 255;         // Maximum motor speed
-const int16_t RAMP_STEP = 15;          // Speed change per cycle (acceleration)
-const int16_t DEADZONE = 12;           // Joystick deadzone to ignore noise
-const float SPEED_CURVE_GAIN = 1.5;    // Exponential response curve
-#define BTN_SPEED 200                  // Digital control button speed
-
-// Serial communication parameters
-const char START_BYTE = '<';
-const char END_BYTE = '>';
-const uint16_t SERIAL_TIMEOUT = 500;   // Milliseconds before emergency stop
+const int16_t MAX_SPEED = 255;
+const int16_t RAMP_STEP = 15;
+const int16_t DEADZONE = 12;
+const float SPEED_CURVE_GAIN = 1.5;
+#define BTN_SPEED 200
+#define LINE_RUN_TIME 5000  // Thời gian chạy thẳng 5 giây
 
 // ================================================================
 // GLOBAL VARIABLES
 // ================================================================
 
-// PS2 Controller instance
 PS2X ps2Controller;
 
-// Control modes: Analog (joystick) or Digital (buttons)
 enum ControlMode { MODE_ANALOG, MODE_DIGITAL };
 ControlMode currentControlMode = MODE_ANALOG;
 
-// System status flags
 struct {
-  bool lineFollowing : 1;  // Line following mode active
-  bool towActive : 1;      // Tow mechanism active
-  bool clampClosed : 1;    // Clamp mechanism active
-  bool stepperMoving : 1;  // Stepper motor active
+  bool lineFollowing : 1;
+  bool clampClosed : 1;
+  uint32_t lineStartTime = 0;
 } systemStatus;
 
-// Speed variables
-int16_t targetSpeed[3] = {0};   // Desired [X, Y, R] movement
-int16_t currentSpeed[3] = {0};  // Current [X, Y, R] movement after ramping
+int16_t targetSpeed[3] = {0};
+int16_t currentSpeed[3] = {0};
 
-// Timing variables
-uint32_t lastPS2Check = 0;
 uint32_t lastControlUpdate = 0;
-uint32_t lastValidPacket = 0;
 
 // ================================================================
 // INITIALIZATION & SETUP
@@ -106,16 +82,12 @@ uint32_t lastValidPacket = 0;
 
 void setup() {
   Serial.begin(115200);
-  while (!Serial);  // Wait for Serial port
-  
   setupMotorPins();
   setupPS2Controller();
 
-  // Set PWM frequency to ~31 kHz for smoother motor control
+  // Cấu hình PWM
   TCCR1B = (TCCR1B & 0b11111000) | 0x01;
   TCCR2B = (TCCR2B & 0b11111000) | 0x01;
-  
-  lastValidPacket = millis();  // Prevent immediate emergency stop
 }
 
 void setupMotorPins() {
@@ -123,7 +95,7 @@ void setupMotorPins() {
     pinMode(MOTORS[i].in1, OUTPUT);
     pinMode(MOTORS[i].in2, OUTPUT);
     pinMode(MOTORS[i].en, OUTPUT);
-    digitalWrite(MOTORS[i].en, LOW);  // Motors off initially
+    digitalWrite(MOTORS[i].en, LOW);
   }
 }
 
@@ -132,16 +104,9 @@ void setupPS2Controller() {
   int error = 1;
   
   while (error && retryCount < 5) {
-// Add a controller type parameter (try 0, 1, or 2)
-  error = ps2Controller.config_gamepad(
-    PS2_PINS[3], PS2_PINS[1], 
-    PS2_PINS[2], PS2_PINS[0],
-    false, false
-  );
-    if (error) {
-      delay(500);
-      retryCount++;
-    }
+    error = ps2Controller.config_gamepad(PS2_PINS[3], PS2_PINS[1], PS2_PINS[2], PS2_PINS[0], false, false);
+    if (error) delay(500);
+    retryCount++;
   }
 }
 
@@ -150,7 +115,7 @@ void setupPS2Controller() {
 // ================================================================
 
 void loop() {
-  const uint16_t CONTROL_INTERVAL = 10; // 10ms = 100Hz update rate
+  const uint16_t CONTROL_INTERVAL = 10;
   uint32_t currentMillis = millis();
 
   if (currentMillis - lastControlUpdate >= CONTROL_INTERVAL) {
@@ -158,22 +123,13 @@ void loop() {
     updatePS2Controller();
 
     if (systemStatus.lineFollowing) {
-      // Line Following Mode: only process START button and square to exit
-      if (ps2Controller.ButtonPressed(PSB_SQUARE)) {
-        systemStatus.lineFollowing = false;
-        sendCommand('L', 0);
-      }
       lineFollowingMode();
       updateMotorOutput();
     } else {
-      // Manual Control Mode: process inputs and handle additional modes
       processControlInput();
       updateMotorOutput();
       handleSystemModes();
     }
-
-    checkSafety();
-    handleSerialComm();  // Process Serial data once per cycle
   }
 }
 
@@ -186,15 +142,11 @@ void updatePS2Controller() {
 }
 
 void processControlInput() {
-  if (systemStatus.lineFollowing) return;
-
-  // Switch between Analog/Digital control modes
   if (ps2Controller.ButtonPressed(PSB_SELECT)) {
     currentControlMode = (currentControlMode == MODE_ANALOG) ? MODE_DIGITAL : MODE_ANALOG;
     memset(targetSpeed, 0, sizeof(targetSpeed));
   }
 
-  // Process input based on current control mode
   if (currentControlMode == MODE_ANALOG) {
     processAnalogSticks();
   } else {
@@ -226,12 +178,10 @@ void processDigitalButtons() {
 // ================================================================
 
 void updateMotorOutput() {
-  // Apply acceleration/deceleration ramping to all axes
   for (byte i = 0; i < 3; i++) {
     currentSpeed[i] = applyRamping(currentSpeed[i], targetSpeed[i]);
   }
 
-  // Calculate and apply speeds to all 4 wheels
   int16_t wheelSpeeds[MOTOR_COUNT];
   calculateMecanumSpeeds(wheelSpeeds);
   
@@ -241,13 +191,11 @@ void updateMotorOutput() {
 }
 
 void calculateMecanumSpeeds(int16_t* speeds) {
-  // Mecanum wheel mixing algorithm
-  speeds[0] = currentSpeed[1] - currentSpeed[0] - currentSpeed[2]; // BR
-  speeds[1] = currentSpeed[1] + currentSpeed[0] + currentSpeed[2]; // BL
-  speeds[2] = currentSpeed[1] + currentSpeed[0] - currentSpeed[2]; // FR
-  speeds[3] = currentSpeed[1] - currentSpeed[0] + currentSpeed[2]; // FL
+  speeds[0] = currentSpeed[1] - currentSpeed[0] - currentSpeed[2];
+  speeds[1] = currentSpeed[1] + currentSpeed[0] + currentSpeed[2];
+  speeds[2] = currentSpeed[1] + currentSpeed[0] - currentSpeed[2];
+  speeds[3] = currentSpeed[1] - currentSpeed[0] + currentSpeed[2];
 
-  // Normalize speeds if any exceeds maximum
   int16_t maxSpeed = 0;
   for (byte i = 0; i < MOTOR_COUNT; i++) {
     maxSpeed = max(maxSpeed, abs(speeds[i]));
@@ -263,143 +211,55 @@ void calculateMecanumSpeeds(int16_t* speeds) {
 
 void setMotorSpeed(byte motorIndex, int16_t speed) {
   speed = constrain(speed, -MAX_SPEED, MAX_SPEED);
-  bool forward = (speed > 0);
-  
-  digitalWrite(MOTORS[motorIndex].in1, forward);
-  digitalWrite(MOTORS[motorIndex].in2, !forward);
+  digitalWrite(MOTORS[motorIndex].in1, speed > 0);
+  digitalWrite(MOTORS[motorIndex].in2, speed <= 0);
   analogWrite(MOTORS[motorIndex].en, abs(speed));
 }
 
 // ================================================================
-// SYSTEM MODES & MECHANISMS CONTROL
+// SYSTEM MODES
 // ================================================================
 
 void handleSystemModes() {
   handleModeSelection();
-
-  // Process active mechanisms 
-  if (systemStatus.towActive)     controlTowMechanism();
-  if (systemStatus.clampClosed)   controlClamp();
-  if (systemStatus.stepperMoving) controlStepper();
+  if (systemStatus.clampClosed) controlClamp();
 }
 
 void handleModeSelection() {
   static uint32_t lastModeChange = 0;
-  if (millis() - lastModeChange < 250) return;  // Debounce
+  if (millis() - lastModeChange < 250) return;
 
-  // PS2 geometric buttons control different modes
-  
-  // SQUARE (□): Line Following Mode
+  // Kích hoạt chế độ line following
   if (ps2Controller.ButtonPressed(PSB_SQUARE)) {
     systemStatus.lineFollowing = true;
+    systemStatus.lineStartTime = millis();
+    targetSpeed[1] = BTN_SPEED; // Chạy thẳng về phía trước
     lastModeChange = millis();
   }
-  
-  // TRIANGLE (△): Tow Mode (exclusive)
-  if (ps2Controller.ButtonPressed(PSB_TRIANGLE)) {
-    if (!systemStatus.towActive) {
-      systemStatus.clampClosed = false;
-      systemStatus.stepperMoving = false;
-    }
-    systemStatus.towActive = !systemStatus.towActive;
-    lastModeChange = millis();
-  }
-  
-  // CIRCLE (○): Clamp Mode (disables tow)
+
+  // Điều khiển kẹp
   if (ps2Controller.ButtonPressed(PSB_CIRCLE)) {
-    if (!systemStatus.clampClosed) {
-      systemStatus.towActive = false;
-    }
     systemStatus.clampClosed = !systemStatus.clampClosed;
-    lastModeChange = millis();
-  }
-  
-  // CROSS (×): Stepper Mode (disables tow)
-  if (ps2Controller.ButtonPressed(PSB_CROSS)) {
-    if (!systemStatus.stepperMoving) {
-      systemStatus.towActive = false;
-    }
-    systemStatus.stepperMoving = !systemStatus.stepperMoving;
     lastModeChange = millis();
   }
 }
 
 void lineFollowingMode() {
-  if (ps2Controller.ButtonPressed(PSB_START)) {
-    delay(5000);
-    sendCommand('L', 1);
-    lastValidPacket = millis();  // Prevent timeout
+  if (millis() - systemStatus.lineStartTime >= LINE_RUN_TIME) {
+    systemStatus.lineFollowing = false;
+    memset(targetSpeed, 0, sizeof(targetSpeed));
   }
 }
 
-void controlTowMechanism() {
-  if (ps2Controller.ButtonPressed(PSB_L2)) sendCommand('T', 1);
-  if (ps2Controller.ButtonPressed(PSB_R2)) sendCommand('T', 0);
-}
+// ================================================================
+// CLAMP CONTROL
+// ================================================================
 
 void controlClamp() {
-  if (ps2Controller.ButtonPressed(PSB_L2)) sendCommand('C', 1);
-  if (ps2Controller.ButtonPressed(PSB_R2)) sendCommand('C', 0);
-}
-
-void controlStepper() {
-  if (ps2Controller.ButtonPressed(PSB_L3)) sendCommand('S', 1);
-  if (ps2Controller.ButtonPressed(PSB_R3)) sendCommand('S', 0);
-}
-
-// ================================================================
-// SERIAL COMMUNICATION
-// ================================================================
-
-void handleSerialComm() {
-  static String inputBuffer = "";
-  
-  while (Serial.available()) {
-    char c = Serial.read();
-    
-    if (c == START_BYTE) {
-      inputBuffer = "";
-    } else if (c == END_BYTE) {
-      processSerialCommand(inputBuffer);
-      inputBuffer = "";
-    } else if (inputBuffer.length() < 64) {
-      inputBuffer += c;
-    }
-  }
-}
-
-void processSerialCommand(String &cmd) { // Process X:Y:R commands from sensor data on slave Arduino
-  int firstColon = cmd.indexOf(':');
-  int secondColon = cmd.indexOf(':', firstColon + 1);
-
-  // Process X:Y:R format commands from slave Arduino
-  if (firstColon != -1 && secondColon != -1) {
-    int x = cmd.substring(0, firstColon).toInt();
-    int y = cmd.substring(firstColon + 1, secondColon).toInt();
-    int r = cmd.substring(secondColon + 1).toInt();
-    
-    targetSpeed[0] = constrain(x, -MAX_SPEED, MAX_SPEED);
-    targetSpeed[1] = constrain(y, -MAX_SPEED, MAX_SPEED);
-    targetSpeed[2] = constrain(r, -MAX_SPEED, MAX_SPEED);
-    
-    lastValidPacket = millis();  // Reset timeout
-  }
-}
-
-void sendCommand(char cmd, int data) {
-  // Format: <CMD:DATA:CHECKSUM>
-  char payload[20];
-  snprintf(payload, sizeof(payload), "%c:%d", cmd, data);
-  
-  // Calculate XOR checksum
-  byte checksum = 0;
-  for (int i = 0; payload[i] != '\0'; i++) {
-    checksum ^= payload[i];
-  }
-  
-  char packet[30];
-  snprintf(packet, sizeof(packet), "%c%s:%02X%c", START_BYTE, payload, checksum, END_BYTE);
-  Serial.println(packet);
+  // Thêm code điều khiển servo kẹp ở đây
+  // Ví dụ:
+  // if (systemStatus.clampClosed) closeClamp();
+  // else openClamp();
 }
 
 // ================================================================
@@ -412,10 +272,9 @@ int16_t applyDeadzone(int16_t value) {
 
 int16_t applyCurve(int16_t value) {
   if (value == 0) return 0;
-  bool negative = (value < 0);
+  bool negative = value < 0;
   float ratio = pow(abs(value) / (float)MAX_SPEED, SPEED_CURVE_GAIN);
-  int16_t curved = round(ratio * MAX_SPEED);
-  return negative ? -curved : curved;
+  return negative ? -round(ratio * MAX_SPEED) : round(ratio * MAX_SPEED);
 }
 
 int16_t applyRamping(int16_t current, int16_t target) {
@@ -428,24 +287,3 @@ void emergencyStop() {
   memset(targetSpeed, 0, sizeof(targetSpeed));
   updateMotorOutput();
 }
-
-void checkSafety() {    
-  if (millis() - lastValidPacket > SERIAL_TIMEOUT) {
-    emergencyStop();  // Stop if no valid data received within timeout period
-  }
-}
-
-/*
---------------------------------------------------------------------------------------------------------
-| Param | Code Location      | Purpose                   | Default Value          | Adjustment Range   |
---------------------------------------------------------------------------------------------------------
-| [P1]  | Motor Performance  | Maximum Speed             | MAX_SPEED = 255        | 150 - 255          |
-| [P2]  | Motor Performance  | Ramping Step              | RAMP_STEP = 15         | 5 - 30             |
-| [P3]  | Motor Performance  | Speed Curve Gain          | SPEED_CURVE_GAIN = 1.5 | Changed as needed  |
-| [P4]  | PS2 Controls       | Deadzone                  | DEADZONE = 12          | 10 - 50            |
-| [P5]  | PS2 Controls       | Button Speed              | BTN_SPEED = 200        | 100 - 255          |
-| [P6]  | Hardware Config    | Motor Pins (MOTORS[])     | Defined above          | Change as needed   |
-| [P7]  | Hardware Config    | PS2 Controller Pins       | PS2_PINS[]             | Change as needed   |
-| [P8]  | Communication      | Serial Timeout            | SERIAL_TIMEOUT = 500   | 250 - 2000         |
---------------------------------------------------------------------------------------------------------
-*/
