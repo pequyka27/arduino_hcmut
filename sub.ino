@@ -290,24 +290,15 @@ void followLine(float position) {
 void handleLineLoss() {
   if (!lineLost) {
     lineLost = true;
-    
-    if (lastError > 0) {
-      lastDirection = 1;
-    } else {
-      lastDirection = -1;
-    }
+    lastLineSeen = millis();
   }
   
-  unsigned long lostTime = millis() - lastLineSeen;
-  
-  if (lostTime < LINE_TIMEOUT) {
-    xSpeed = 0;
-    ySpeed = BASE_SPEED / 2;
-    rSpeed = lastDirection * MAX_TURN_RATE;
-  } else {
+  // Chỉ dừng sau 50ms mất line để tránh nhiễu
+  if (millis() - lastLineSeen > 50) {
     xSpeed = 0;
     ySpeed = 0;
     rSpeed = 0;
+    sendControlValues();
   }
 }
 
