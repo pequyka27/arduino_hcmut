@@ -245,10 +245,17 @@ void handleModeSelection() {
 }
 
 void lineFollowingMode() {
-  if (millis() - systemStatus.lineStartTime >= LINE_RUN_TIME) {
-    systemStatus.lineFollowing = false;
-    memset(targetSpeed, 0, sizeof(targetSpeed));
-  }
+    const float LINE_SPEED_FACTOR = 0.6;
+    int16_t targetLineSpeed = BTN_SPEED * LINE_SPEED_FACTOR;
+    
+    // Áp dụng ramping cho trục Y (tiến/lùi)
+    targetSpeed[1] = applyRamping(targetSpeed[1], targetLineSpeed);
+    
+    // Giữ nguyên logic dừng
+    if (millis() - systemStatus.lineStartTime >= LINE_RUN_TIME) {
+        systemStatus.lineFollowing = false;
+        memset(targetSpeed, 0, sizeof(targetSpeed));
+    }
 }
 
 // ================================================================
