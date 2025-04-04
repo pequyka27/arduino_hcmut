@@ -2,25 +2,9 @@
 // SLAVE ARDUINO - LINE FOLLOWING & SENSOR CONTROL
 // ================================================================
 
-#include <Wire.h>
-
-// ================================================================
-// HARDWARE CONFIGURATION
-// ================================================================
-
 // Cảm biến dò line
 const byte LINE_SENSORS[] = {A0, A1, A2, A3, A4};
 const byte SENSOR_COUNT = 5;
-
-// Động cơ và cơ cấu chấp hành
-//#define MOTOR_PWM_L 5   // PWM chan dong co trai
-//#define MOTOR_DIR_L 4   
-//#define MOTOR_PWM_R 6   // PWM chan dong co phai
-//#define MOTOR_DIR_R 7
-
-// ================================================================
-// THAM SỐ HỆ THỐNG
-// ================================================================
 
 // Hiệu chỉnh cảm biến
 int sensorMin[SENSOR_COUNT] = {1023, 1023, 1023, 1023, 1023};
@@ -30,7 +14,7 @@ bool isCalibrated = false;
 
 // Điều khiển PID
 float Kp = 18.0;    // Hệ số P
-float Ki = 0.08;    // Hệ số I 
+float Ki =.08;    // Hệ số I 
 float Kd = 22.0;    // Hệ số D
 float integral = 0;
 float lastError = 0;
@@ -58,26 +42,10 @@ String inputBuffer = "";
 const int SEND_INTERVAL = 50;
 unsigned long lastSendTime = 0;
 
-// ================================================================
-// KHỞI TẠO HỆ THỐNG
-// ================================================================
-
 void setup() {
   Serial.begin(115200);
-  
-  // Khởi tạo động cơ
-  // pinMode(MOTOR_DIR_L, OUTPUT);
-  // pinMode(MOTOR_PWM_L, OUTPUT);
-  // pinMode(MOTOR_DIR_R, OUTPUT);
-  // pinMode(MOTOR_PWM_R, OUTPUT);
-  
-  // Hiệu chỉnh cảm biến
   calibrateSensors();
 }
-
-// ================================================================
-// VÒNG LẶP CHÍNH
-// ================================================================
 
 void loop() {
   handleSerialComm();
@@ -106,10 +74,6 @@ void loop() {
   
   sendControlData();
 }
-
-// ================================================================
-// XỬ LÝ DÒ LINE
-// ================================================================
 
 void processLineFollowing() {
   int sensorValues[SENSOR_COUNT];
@@ -181,7 +145,6 @@ void handleLineLoss() {
     lastLineSeen = millis();
   }
 
-  // Dừng sau khi mất line quá thời gian quy định
   if(millis() - lastLineSeen > LINE_TIMEOUT) {
     currentMode = 0;
     ySpeed = rSpeed = 0;
@@ -194,10 +157,6 @@ void handleCrossIntersection() {
   ySpeed = BASE_SPEED;
 }
 
-// ================================================================
-// ĐIỀU KHIỂN CƠ CẤU
-// ================================================================
-
 void controlClamp() {
   // Triển khai logic điều khiển kẹp
 }
@@ -209,10 +168,6 @@ void controlPull() {
 void controlStepper() {
   // Triển khai logic điều khiển stepper
 }
-
-// ================================================================
-// GIAO TIẾP SERIAL
-// ================================================================
 
 void handleSerialComm() {
   while(Serial.available() > 0) {
@@ -248,10 +203,6 @@ void setMode(byte newMode) {
   currentMode = newMode;
   if(newMode != 1) integral = lastError = 0;
 }
-
-// ================================================================
-// HÀM PHỤ TRỢ
-// ================================================================
 
 void calibrateSensors() {
   unsigned long startTime = millis();
