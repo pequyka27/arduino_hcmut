@@ -132,11 +132,12 @@ void setupPS2Controller() {
   int error = 1;
   
   while (error && retryCount < 5) {
-    error = ps2Controller.config_gamepad(
-      PS2_PINS[3], PS2_PINS[1], 
-      PS2_PINS[2], PS2_PINS[0],
-      true, true
-    );
+// Add a controller type parameter (try 0, 1, or 2)
+  error = ps2Controller.config_gamepad(
+    PS2_PINS[3], PS2_PINS[1], 
+    PS2_PINS[2], PS2_PINS[0],
+    false, false
+  );
     if (error) {
       delay(500);
       retryCount++;
@@ -182,14 +183,6 @@ void loop() {
 
 void updatePS2Controller() {
   ps2Controller.read_gamepad();
-
-  // Periodically check PS2 connection (every 3 seconds)
-  if (millis() - lastPS2Check > 3000) {
-    lastPS2Check = millis();
-    if (ps2Controller.config_gamepad(PS2_PINS[3], PS2_PINS[1], PS2_PINS[2], PS2_PINS[0], true, true) != 0) {
-      emergencyStop();
-    }
-  }
 }
 
 void processControlInput() {
