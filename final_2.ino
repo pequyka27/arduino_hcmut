@@ -3,16 +3,22 @@
 
 /*
 --------------------------------------------------------------------------------------------------------
-| Param | Code Location      | Purpose                   | Default Value          | Adjustment Range   |
+| Param | Code Location       | Purpose                   | Default Value          | Adjustment Range   |
 --------------------------------------------------------------------------------------------------------
-| [P1]  | Motor Performance  | Maximum Speed             | MAX_SPEED = 255        | 150 - 255          |
-| [P2]  | Motor Performance  | Ramping Step              | RAMP_STEP = 15         | 5 - 30             |
-| [P3]  | Motor Performance  | Speed Curve Gain          | SPEED_CURVE_GAIN = 1.5 | Changed as needed  |
-| [P4]  | PS2 Controls       | Deadzone                  | DEADZONE = 12          | 10 - 50            |
-| [P5]  | PS2 Controls       | Button Speed              | BTN_SPEED = 200        | 100 - 255          |
-| [P6]  | Hardware Config    | Motor Pins (MOTORS[])     | Defined below          | Change as needed   |
-| [P7]  | Hardware Config    | PS2 Controller Pins       | PS2_PINS[]             | Change as needed   |
-| [P8]  | Communication      | Serial Timeout            | SERIAL_TIMEOUT = 500   | 250 - 2000         |
+| [P1]  | Motor Performance   | Maximum Speed             | MAX_SPEED = 255        | 150 - 255          |
+| [P2]  | Motor Performance   | Ramping Step              | RAMP_STEP = 15         | 5 - 30             |
+| [P3]  | Motor Performance   | Speed Curve Gain          | SPEED_CURVE_GAIN = 1.5 | 1.0 - 3.0          |
+| [P4]  | PS2 Controls        | Deadzone                  | DEADZONE = 12          | 8 - 20             |
+| [P5]  | PS2 Controls        | Button Speed              | BTN_SPEED = 200        | 100 - 255          |
+| [P6]  | Line Following      | Run Duration              | LINE_RUN_TIME = 5000   | 1000 - 10000       |
+| [P7]  | System Timing       | Control Update Interval   | CONTROL_INTERVAL = 10  | 5 - 20             |
+| [P8]  | System Timing       | Button Debounce Time      | DEBOUNCE = 250         | 150 - 500          |
+| [P9]  | Servo Configuration | Open Angle                | OPEN_ANGLE = 30        | 0 - 90             |
+| [P10] | Servo Configuration | Close Angle               | CLOSE_ANGLE = 180      | 90 - 180           |
+| [P11] | Hardware Config     | Servo Pin                 | SERVO_PIN = 6          | Change as needed   |
+| [P12] | Hardware Config     | Motor Pins (MOTORS[])     | See motors array       | Change as needed   |
+| [P13] | Hardware Config     | PS2 Controller Pins       | PS2_PINS[]             | Change as needed   |
+| [P14] | System Behavior     | Countdown Time            | 5000 (in lineFollowing)| 0 - 10000          |
 --------------------------------------------------------------------------------------------------------
 */
 
@@ -26,14 +32,14 @@ const struct {
   {4, 5, 3},    // Back Right (BR)
   {7, 8, 9},    // Back Left (BL)
   {2, 12, 10},  // Front Right (FR)
-  {13, A0, 11}  // Front Left (FL)
+  {6, A0, 11}  // Front Left (FL)
 };
 
 const byte PS2_PINS[] = {A2, A3, A4, A5}; // DAT, CMD, SEL, CLK
 
 #define SERVO_PIN 6
 const int OPEN_ANGLE = 30;
-const int CLOSE_ANGLE = 120;
+const int CLOSE_ANGLE = 180;
 
 // ------------------------------
 // System Parameters & Defines
