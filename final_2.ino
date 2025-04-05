@@ -37,7 +37,7 @@ const struct {
 
 const byte PS2_PINS[] = {A2, A3, A4, A5}; // DAT, CMD, SEL, CLK
 
-#define SERVO_PIN 6
+#define SERVO_PIN A1
 const int OPEN_ANGLE = 30;
 const int CLOSE_ANGLE = 180;
 
@@ -104,7 +104,6 @@ void setup() {
   
   // Configure PWM frequency
   TCCR1B = (TCCR1B & 0b11111000) | 0x01;
-  TCCR2B = (TCCR2B & 0b11111000) | 0x01;
 }
 
 void loop() {
