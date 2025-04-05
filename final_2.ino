@@ -29,15 +29,15 @@
 const struct {
   byte in1, in2, en;
 } MOTORS[MOTOR_COUNT] = {
-  {4, 5, 3},     // Back Right (BR)
-  {7, 8, 9},     // Back Left (BL)
-  {2, 12, 10},   // Front Right (FR)
+  {4, 7, 3},     // Back Right (BR)
+  {8, 9, 5},     // Back Left (BL)
+  {2, 12, 6},   // Front Right (FR)
   {A1, A0, 11}   // Front Left (FL) - Thay đổi IN1 từ 6 sang A1
 };
 
 const byte PS2_PINS[] = {A2, A3, A4, A5}; // DAT, CMD, SEL, CLK
 
-#define SERVO_PIN 13  // Thay đổi từ 6 sang 13 để tránh xung đột
+#define SERVO_PIN 13
 const int OPEN_ANGLE = 30;
 const int CLOSE_ANGLE = 180;
 
@@ -103,7 +103,8 @@ void setup() {
   setupServo();
   
   // Configure PWM frequency - tránh điều chỉnh cho Timer2 để không ảnh hưởng Servo
-  TCCR2B = (TCCR2B & 0b11111000) | 0x01; // Chỉ điều chỉnh Timer2 (chân 3, 11)
+  TCCR0B = (TCCR0B & 0b11111000) | 0x01; // PWM 62.5kHz
+  TCCR2B = (TCCR2B & 0b11111000) | 0x01; // PWM 31.4kHz
 }
 
 void loop() {
